@@ -1,3 +1,3 @@
-# plankton-engine
+# plankton-rs
 
-A port of [Osrepnay/PlanktonEngine](https://github.com/Osrepnay/PlanktonEngine) in Rust.
+A port of [Osrepnay/Plankton](https://github.com/Osrepnay/Plankton) in Rust.
