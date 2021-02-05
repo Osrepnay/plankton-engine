@@ -1,6 +1,6 @@
-use plankton_engine::game::Game;
-use plankton_engine::piecemove::PieceMove;
-use plankton_engine::specialmove::SpecialMove;
+use plankton::game::Game;
+use plankton::piecemove::PieceMove;
+use plankton::specialmove::SpecialMove;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::time::Instant;
@@ -142,7 +142,7 @@ fn main() {
                     };
                     if depth != -1 {
                         print_bestmove(
-                            plankton_engine::best_move(
+                            plankton::best_move(
                                 &mut game_copy,
                                 color,
                                 depth as u8,
@@ -159,7 +159,7 @@ fn main() {
                                 print_bestmove(fallback);
                                 break;
                             }
-                            let best_move = plankton_engine::best_move(
+                            let best_move = plankton::best_move(
                                 &mut game_copy,
                                 color,
                                 search_depth,

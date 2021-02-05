@@ -1,5 +1,5 @@
 [package]
-name = "plankton_engine"
+name = "plankton"
 version = "0.1.0"
 authors = ["Osrepnay"]
 edition = "2018"
@@ -9,9 +9,9 @@ edition = "2018"
 [dependencies]
 
 [lib]
-name = "plankton_engine"
+name = "plankton"
 path = "src/lib.rs"
 
 [[bin]]
-name = "plankton_engine"
+name = "plankton"
 path = "src/main.rs"
