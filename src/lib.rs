@@ -3,6 +3,7 @@ use crate::piecemove::PieceMove;
 use std::time::Instant;
 
 pub mod game;
+pub mod magics;
 pub mod movegen;
 pub mod moveutil;
 pub mod piecemove;
@@ -383,11 +384,14 @@ mod tests {
         game.set_moves();
         assert_eq!(
             crate::best_move(&mut game, 0, 1, i128::max_value()).unwrap(),
-            (PieceMove {
-                start: 15,
-                end: 7,
-                special: SpecialMove::None,
-            }, 10000.0)
+            (
+                PieceMove {
+                    start: 15,
+                    end: 7,
+                    special: SpecialMove::None,
+                },
+                10000.0
+            )
         );
     }
     #[test]

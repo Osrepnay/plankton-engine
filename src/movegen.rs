@@ -1,3 +1,4 @@
+use crate::magics;
 use crate::moveutil;
 use crate::piecemove::PieceMove;
 use crate::specialmove::SpecialMove;
@@ -5,6 +6,10 @@ use crate::specialmove::SpecialMove;
 #[derive(Clone, PartialEq)]
 pub struct MoveGen {
     rays: [[u64; 8]; 64],
+    bishop_masks: [u64; 64],
+    rook_masks: [u64; 64],
+    bishop_table: Vec<u64>,
+    rook_table: Vec<u64>,
     knight_moves: [u64; 64],
     king_moves: [u64; 64],
 }
@@ -141,13 +146,62 @@ impl MoveGen {
             ray & !(1u64 << position)
         }
         let mut rays = [[0; 8]; 64];
+        let mut bishop_masks = [0; 64];
+        let mut rook_masks = [0; 64];
         for (position, square_rays) in rays.iter_mut().enumerate() {
             for (direction, ray) in square_rays.iter_mut().enumerate() {
                 *ray = gen_ray(position as u8, direction as u8);
+                if direction % 2 == 0 {
+                    let edge_mask = match direction {
+                        0 => !0xff00000000000000,
+                        2 => !0x8080808080808080,
+                        4 => !0xff,
+                        6 => !0x101010101010101,
+                        _ => 0,
+                    };
+                    rook_masks[position] |= *ray & edge_mask;
+                } else {
+                    bishop_masks[position] |= *ray & 35604928818740736u64;
+                }
+            }
+        }
+        fn blocker_from_idx(idx: u32, mut mask: u64) -> u64 {
+            let mut blockers = 0;
+            let mut bit_at = 0;
+            while mask != 0 {
+                let lsb = mask.trailing_zeros();
+                mask &= !(1u64 << lsb);
+                if idx & (1u32 << bit_at) != 0 {
+                    blockers |= 1u64 << lsb;
+                }
+                bit_at += 1;
+            }
+            blockers
+        }
+        let mut bishop_table = vec![0; 65536];
+        let mut rook_table = vec![0; 262144];
+        for square in 0..64 {
+            for bishop_blockers_idx in 0..(1u64 << magics::BISHOP_INDICES[square]) {
+                let blockers = blocker_from_idx(bishop_blockers_idx as u32, bishop_masks[square]);
+                let key = (blockers.wrapping_mul(magics::BISHOP_MAGICS[square]))
+                    >> (64 - magics::BISHOP_INDICES[square]);
+                bishop_table[square * 512 + key as usize] =
+                    MoveGen::gen_bishop_classical(rays, square as u8, blockers);
+            }
+            for rook_blockers_idx in 0..(1u64 << magics::ROOK_INDICES[square]) {
+                let blockers = blocker_from_idx(rook_blockers_idx as u32, rook_masks[square]);
+                let key = (blockers.wrapping_mul(magics::ROOK_MAGICS[square]))
+                    >> (64 - magics::ROOK_INDICES[square]);
+                rook_table[square * 4096 + key as usize] =
+                    MoveGen::gen_rook_classical(rays, square as u8, blockers);
             }
         }
         MoveGen {
             rays,
+            bishop_masks,
+            rook_masks,
+            bishop_table,
+            rook_table,
             knight_moves,
             king_moves,
         }
@@ -174,10 +228,10 @@ impl MoveGen {
         }
     }
     fn gen_pawn(&self, color: u8, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
-        let position = position as i8;
+        let position = position as isize;
         let mut square_moves = [PieceMove::empty(); 28];
         let mut num_moves: u8 = 0;
-        let pos_change = -((color as i8 * 2 - 1) * 8);
+        let pos_change = -((color as isize * 2 - 1) * 8);
         let is_promotion = position + pos_change >= 56 || position + pos_change < 8;
         let mut add_move = |start: u8, end: u8| {
             if is_promotion {
@@ -239,12 +293,32 @@ impl MoveGen {
         (square_moves, num_moves)
     }
     fn gen_bishop(&self, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
+        let blockers = blockers & self.bishop_masks[position as usize];
+        let key = (blockers.wrapping_mul(magics::BISHOP_MAGICS[position as usize]))
+            >> (64 - magics::BISHOP_INDICES[position as usize]);
+        let moves = self.bishop_table[position as usize * 512 + key as usize];
+        (
+            moveutil::bitboard_to_piecemoves(moves, position),
+            moves.count_ones() as u8,
+        )
+    }
+    fn gen_rook(&self, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
+        let blockers = blockers & self.rook_masks[position as usize];
+        let key = (blockers.wrapping_mul(magics::ROOK_MAGICS[position as usize]))
+            >> (64 - magics::ROOK_INDICES[position as usize]);
+        let moves = self.rook_table[position as usize * 4096 + key as usize];
+        (
+            moveutil::bitboard_to_piecemoves(moves, position),
+            moves.count_ones() as u8,
+        )
+    }
+    fn gen_bishop_classical(rays: [[u64; 8]; 64], position: u8, blockers: u64) -> u64 {
         let mut board = 0;
         for i in 0..4 {
-            let masked_blockers = blockers & self.rays[position as usize][i * 2 + 1];
+            let masked_blockers = blockers & rays[position as usize][i * 2 + 1];
             let moves = {
                 if masked_blockers == 0 {
-                    self.rays[position as usize][i * 2 + 1]
+                    rays[position as usize][i * 2 + 1]
                 } else {
                     let first_blocker_pos = {
                         match i * 2 + 1 {
@@ -255,24 +329,21 @@ impl MoveGen {
                             _ => 0,
                         }
                     };
-                    let blocker_ray = self.rays[first_blocker_pos as usize][i * 2 + 1];
-                    self.rays[position as usize][i * 2 + 1] & !blocker_ray
+                    let blocker_ray = rays[first_blocker_pos as usize][i * 2 + 1];
+                    rays[position as usize][i * 2 + 1] & !blocker_ray
                 }
             };
             board |= moves;
         }
-        (
-            moveutil::bitboard_to_piecemoves(board, position),
-            board.count_ones() as u8,
-        )
+        board
     }
-    fn gen_rook(&self, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
+    fn gen_rook_classical(rays: [[u64; 8]; 64], position: u8, blockers: u64) -> u64 {
         let mut board = 0;
         for i in 0..4 {
-            let masked_blockers = blockers & self.rays[position as usize][i * 2];
+            let masked_blockers = blockers & rays[position as usize][i * 2];
             let moves = {
                 if masked_blockers == 0 {
-                    self.rays[position as usize][i * 2]
+                    rays[position as usize][i * 2]
                 } else {
                     let first_blocker_pos = {
                         match i * 2 {
@@ -283,17 +354,15 @@ impl MoveGen {
                             _ => 0,
                         }
                     };
-                    let blocker_ray = self.rays[first_blocker_pos as usize][i * 2];
-                    self.rays[position as usize][i * 2] & !blocker_ray
+                    let blocker_ray = rays[first_blocker_pos as usize][i * 2];
+                    rays[position as usize][i * 2] & !blocker_ray
                 }
             };
             board |= moves;
         }
-        (
-            moveutil::bitboard_to_piecemoves(board, position),
-            board.count_ones() as u8,
-        )
+        board
     }
+
     fn gen_queen(&self, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
         let mut board = 0;
         for i in 0..8 {
