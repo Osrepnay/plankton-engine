@@ -49,6 +49,9 @@ fn main() {
                     parse_fen(&mut game, fen);
                     offset = 9;
                 }
+                if debug {
+                    println!("info string color {}", color);
+                }
                 for idx in offset..input.len() {
                     let start = input[idx].as_bytes()[0] - 97 + (input[idx].as_bytes()[1] - 49) * 8;
                     let end = input[idx].as_bytes()[2] - 97 + (input[idx].as_bytes()[3] - 49) * 8;
@@ -88,14 +91,16 @@ fn main() {
                             special,
                         },
                     );
-                    println!(
-                        "info string {:?}",
-                        PieceMove {
-                            start,
-                            end,
-                            special,
-                        }
-                    );
+                    if debug {
+                        println!(
+                            "info string {:?}",
+                            PieceMove {
+                                start,
+                                end,
+                                special,
+                            }
+                        );
+                    }
                     color = move_color ^ 1;
                 }
             }
