@@ -9,8 +9,9 @@ use std::{io, thread};
 fn main() {
     let mut game = Game::new();
     game.starting_game();
-    println!("PlanktonEngine");
+    println!("plankton-rs");
     let mut color = 0;
+    let mut debug = false;
     for input_str in io::stdin().lock().lines() {
         let input: Vec<String> = input_str
             .unwrap()
@@ -87,11 +88,14 @@ fn main() {
                             special,
                         },
                     );
-                    println!("info string {:?}", PieceMove {
-                        start,
-                        end,
-                        special,
-                    });
+                    println!(
+                        "info string {:?}",
+                        PieceMove {
+                            start,
+                            end,
+                            special,
+                        }
+                    );
                     color = move_color ^ 1;
                 }
             }
@@ -141,6 +145,7 @@ fn main() {
                         println!("{}", print_string)
                     };
                     if depth != -1 {
+                        let start_time = Instant::now();
                         print_bestmove(
                             plankton::best_move(
                                 &mut game_copy,
@@ -150,6 +155,9 @@ fn main() {
                             )
                             .unwrap(),
                         );
+                        if debug {
+                            println!("info time {}", start_time.elapsed().as_millis());
+                        }
                     } else {
                         let mut fallback = (PieceMove::empty(), 0.0);
                         let start_time = Instant::now();
@@ -169,12 +177,22 @@ fn main() {
                                 Some(best_move) => fallback = best_move,
                                 None => {
                                     print_bestmove(fallback);
+                                    if debug {
+                                        println!("info time {}", start_time.elapsed().as_millis());
+                                    }
                                     break;
                                 }
                             }
                         }
                     }
                 });
+            }
+            Some("debug") => {
+                debug = match Some(&*input[1].to_string()) {
+                    Some("on") => true,
+                    Some("off") => false,
+                    _ => debug,
+                }
             }
             _ => (),
         }
