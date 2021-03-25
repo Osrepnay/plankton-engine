@@ -1,14 +1,14 @@
 use crate::specialmove::SpecialMove;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct PieceMove {
     pub start: u8,
     pub end: u8,
     pub special: SpecialMove,
 }
 
-impl PieceMove {
-    pub fn empty() -> PieceMove {
+impl Default for PieceMove {
+    fn default() -> Self {
         PieceMove {
             start: 0,
             end: 0,

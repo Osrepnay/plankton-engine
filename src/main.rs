@@ -164,7 +164,7 @@ fn main() {
                             println!("info time {}", start_time.elapsed().as_millis());
                         }
                     } else {
-                        let mut fallback = (PieceMove::empty(), 0.0);
+                        let mut fallback = (PieceMove::default(), 0.0);
                         let start_time = Instant::now();
                         for search_depth in 1..=255 {
                             let search_time = time - start_time.elapsed().as_millis() as i128;

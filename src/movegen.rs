@@ -2,6 +2,7 @@ use crate::magics;
 use crate::moveutil;
 use crate::piecemove::PieceMove;
 use crate::specialmove::SpecialMove;
+use tinyvec::ArrayVec;
 
 #[derive(Clone, PartialEq)]
 pub struct MoveGen {
@@ -213,24 +214,20 @@ impl MoveGen {
         position: u8,
         blockers: u64,
         castle_available: [bool; 4],
-    ) -> ([PieceMove; 28], u8) {
+    ) -> ArrayVec<[PieceMove; 28]> {
         match piece {
             0 => self.gen_pawn(color, position, blockers),
-            1 => (
-                moveutil::bitboard_to_piecemoves(self.knight_moves[position as usize], position),
-                self.knight_moves[position as usize].count_ones() as u8,
-            ),
+            1 => moveutil::bitboard_to_piecemoves(self.knight_moves[position as usize], position),
             2 => self.gen_bishop(position, blockers),
             3 => self.gen_rook(position, blockers),
             4 => self.gen_queen(position, blockers),
             5 => self.gen_king(color, position, blockers, castle_available),
-            _ => ([PieceMove::empty(); 28], 0),
+            _ => ArrayVec::new(),
         }
     }
-    fn gen_pawn(&self, color: u8, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
+    fn gen_pawn(&self, color: u8, position: u8, blockers: u64) -> ArrayVec<[PieceMove; 28]> {
         let position = position as isize;
-        let mut square_moves = [PieceMove::empty(); 28];
-        let mut num_moves: u8 = 0;
+        let mut square_moves = ArrayVec::new();
         let pos_change = -((color as isize * 2 - 1) * 8);
         let is_promotion = position + pos_change >= 56 || position + pos_change < 8;
         let mut add_move = |start: u8, end: u8| {
@@ -242,20 +239,18 @@ impl MoveGen {
                     SpecialMove::QueenPromotion,
                 ];
                 for promotion in &promotions {
-                    square_moves[num_moves as usize] = PieceMove {
+                    square_moves.push(PieceMove {
                         start,
                         end,
                         special: *promotion,
-                    };
-                    num_moves += 1;
+                    });
                 }
             } else {
-                square_moves[num_moves as usize] = PieceMove {
+                square_moves.push(PieceMove {
                     start,
                     end,
                     special: SpecialMove::None,
-                };
-                num_moves += 1;
+                });
             }
         };
         if ((blockers >> (position + pos_change)) & 1) == 0 {
@@ -290,27 +285,21 @@ impl MoveGen {
         {
             add_move(position as u8, (position + pos_change - 1) as u8);
         }
-        (square_moves, num_moves)
+        square_moves
     }
-    fn gen_bishop(&self, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
+    fn gen_bishop(&self, position: u8, blockers: u64) -> ArrayVec<[PieceMove; 28]> {
         let blockers = blockers & self.bishop_masks[position as usize];
         let key = (blockers.wrapping_mul(magics::BISHOP_MAGICS[position as usize]))
             >> (64 - magics::BISHOP_INDICES[position as usize]);
         let moves = self.bishop_table[position as usize * 512 + key as usize];
-        (
-            moveutil::bitboard_to_piecemoves(moves, position),
-            moves.count_ones() as u8,
-        )
+        moveutil::bitboard_to_piecemoves(moves, position)
     }
-    fn gen_rook(&self, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
+    fn gen_rook(&self, position: u8, blockers: u64) -> ArrayVec<[PieceMove; 28]> {
         let blockers = blockers & self.rook_masks[position as usize];
         let key = (blockers.wrapping_mul(magics::ROOK_MAGICS[position as usize]))
             >> (64 - magics::ROOK_INDICES[position as usize]);
         let moves = self.rook_table[position as usize * 4096 + key as usize];
-        (
-            moveutil::bitboard_to_piecemoves(moves, position),
-            moves.count_ones() as u8,
-        )
+        moveutil::bitboard_to_piecemoves(moves, position)
     }
     fn gen_bishop_classical(rays: [[u64; 8]; 64], position: u8, blockers: u64) -> u64 {
         let mut board = 0;
@@ -363,7 +352,7 @@ impl MoveGen {
         board
     }
 
-    fn gen_queen(&self, position: u8, blockers: u64) -> ([PieceMove; 28], u8) {
+    fn gen_queen(&self, position: u8, blockers: u64) -> ArrayVec<[PieceMove; 28]> {
         let mut board = 0;
         for i in 0..8 {
             let masked_blockers = blockers & self.rays[position as usize][i];
@@ -390,10 +379,7 @@ impl MoveGen {
             };
             board |= moves;
         }
-        (
-            moveutil::bitboard_to_piecemoves(board, position),
-            board.count_ones() as u8,
-        )
+        moveutil::bitboard_to_piecemoves(board, position)
     }
     fn gen_king(
         &self,
@@ -401,32 +387,29 @@ impl MoveGen {
         position: u8,
         blockers: u64,
         castle_available: [bool; 4],
-    ) -> ([PieceMove; 28], u8) {
+    ) -> ArrayVec<[PieceMove; 28]> {
         let mut square_moves =
             moveutil::bitboard_to_piecemoves(self.king_moves[position as usize], position);
-        let mut num_moves: u8 = self.king_moves[position as usize].count_ones() as u8;
         if castle_available[(color * 2) as usize]
             && ((blockers >> (position + 1)) & 1) == 0
             && ((blockers >> (position + 2)) & 1) == 0
         {
-            square_moves[num_moves as usize] = PieceMove {
+            square_moves.push(PieceMove {
                 start: position,
                 end: position + 2,
                 special: SpecialMove::CastleKingside,
-            };
-            num_moves += 1;
+            });
         }
         if castle_available[(color * 2 + 1) as usize]
             && ((blockers >> (position - 1)) & 1) == 0
             && ((blockers >> (position - 2)) & 1) == 0
         {
-            square_moves[num_moves as usize] = PieceMove {
+            square_moves.push(PieceMove {
                 start: position,
                 end: position - 2,
                 special: SpecialMove::CastleQueenside,
-            };
-            num_moves += 1;
+            });
         }
-        (square_moves, num_moves)
+        square_moves
     }
 }

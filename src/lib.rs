@@ -21,7 +21,7 @@ pub fn best_move(
 ) -> Option<(PieceMove, f64)> {
     let start_time = Instant::now();
     let mut best_move = (
-        PieceMove::empty(),
+        PieceMove::default(),
         if color == 0 {
             f64::NEG_INFINITY
         } else {
@@ -33,7 +33,7 @@ pub fn best_move(
             continue;
         }
         let piece = game.square_to_piece[square];
-        for move_idx in 0..game.square_num_moves[square] {
+        for move_idx in 0..game.square_moves[square].len() {
             if start_time.elapsed().as_millis() as i128 > search_time {
                 return None;
             }
@@ -94,7 +94,7 @@ pub fn max(
             continue;
         }
         let piece = game.square_to_piece[square];
-        for move_idx in 0..game.square_num_moves[square] {
+        for move_idx in 0..game.square_moves[square].len() {
             if start_time.elapsed().as_millis() as i128 > search_time {
                 return None;
             }
@@ -150,7 +150,7 @@ pub fn min(
             continue;
         }
         let piece = game.square_to_piece[square];
-        for move_idx in 0..game.square_num_moves[square] {
+        for move_idx in 0..game.square_moves[square].len() {
             if start_time.elapsed().as_millis() as i128 > search_time {
                 return None;
             }
@@ -199,7 +199,7 @@ pub fn q_max(game: &mut Game, mut alpha: f64, beta: f64, search_time: i128) -> O
             continue;
         }
         let piece = game.square_to_piece[square];
-        for move_idx in 0..game.square_num_moves[square] {
+        for move_idx in 0..game.square_moves[square].len() {
             if start_time.elapsed().as_millis() as i128 > search_time {
                 return None;
             }
@@ -253,7 +253,7 @@ pub fn q_min(game: &mut Game, alpha: f64, mut beta: f64, search_time: i128) -> O
             continue;
         }
         let piece = game.square_to_piece[square];
-        for move_idx in 0..game.square_num_moves[square] {
+        for move_idx in 0..game.square_moves[square].len() {
             if start_time.elapsed().as_millis() as i128 > search_time {
                 return None;
             }
@@ -297,14 +297,14 @@ pub fn see(game: &mut Game, piece_move: &PieceMove) -> f64 {
         * (-(color as f64) * 2.0 + 1.0);
     let prev_game_state = game.make_move(color, piece, &piece_move);
     let mut lowest_attacker_square = -1;
-    let mut lowest_attacker_move = PieceMove::empty();
+    let mut lowest_attacker_move = PieceMove::default();
     for square in 0..64 {
         if !game.square_exists[square] || game.square_to_color[square] == color {
             continue;
         }
         let mut capture_idx = 0;
         let mut found = false;
-        for move_idx in 0..game.square_num_moves[square] {
+        for move_idx in 0..game.square_moves[square].len() {
             if game.square_moves[square][move_idx as usize].start == square as u8
                 && game.square_moves[square][move_idx as usize].end == piece_move.end
             {

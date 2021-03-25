@@ -3,6 +3,7 @@ use crate::moveutil;
 use crate::piecemove::PieceMove;
 use crate::prevgamestate::PrevGameState;
 use crate::specialmove::SpecialMove;
+use tinyvec::ArrayVec;
 
 #[derive(Clone, PartialEq)]
 pub struct Game {
@@ -10,8 +11,7 @@ pub struct Game {
     pub square_to_color: [u8; 64],
     pub square_to_piece: [u8; 64],
     pub square_exists: [bool; 64],
-    pub square_moves: [[PieceMove; 28]; 64],
-    pub square_num_moves: [u8; 64],
+    pub square_moves: [ArrayVec<[PieceMove; 28]>; 64],
     pub castle_available: [bool; 4],
     move_gen: MoveGen,
 }
@@ -23,8 +23,7 @@ impl Game {
             square_to_color: [0; 64],
             square_to_piece: [0; 64],
             square_exists: [false; 64],
-            square_moves: [[PieceMove::empty(); 28]; 64],
-            square_num_moves: [0; 64],
+            square_moves: [ArrayVec::new(); 64],
             castle_available: [false; 4],
             move_gen: MoveGen::new(),
         }
@@ -41,7 +40,7 @@ impl Game {
                 continue;
             }
             let piece = self.square_to_piece[square];
-            for move_idx in 0..self.square_num_moves[square] {
+            for move_idx in 0..self.square_moves[square].len() {
                 let piece_move = self.square_moves[square][move_idx as usize];
                 if !moveutil::legal_move(self, color, piece, &piece_move) {
                     continue;
@@ -65,7 +64,7 @@ impl Game {
                 continue;
             }
             let piece = self.square_to_piece[square];
-            for move_idx in 0..self.square_num_moves[square] {
+            for move_idx in 0..self.square_moves[square].len() {
                 let piece_move = self.square_moves[square][move_idx as usize];
                 if moveutil::legal_move(self, color, piece, &piece_move) {
                     return false;
@@ -81,10 +80,7 @@ impl Game {
                 continue;
             }
             if self.piece_positions[color as usize][5]
-                & moveutil::piecemoves_to_bitboard(
-                    self.square_moves[square],
-                    self.square_num_moves[square],
-                )
+                & moveutil::piecemoves_to_bitboard(self.square_moves[square])
                 != 0
             {
                 return true;
@@ -324,15 +320,13 @@ impl Game {
         }
         for square in 0..self.square_moves.len() {
             if self.square_exists[square] {
-                let square_move = self.move_gen.gen_move(
+                self.square_moves[square] = self.move_gen.gen_move(
                     self.square_to_color[square],
                     self.square_to_piece[square],
                     square as u8,
                     blockers,
                     self.castle_available,
                 );
-                self.square_moves[square] = square_move.0;
-                self.square_num_moves[square] = square_move.1;
             }
         }
     }
@@ -366,8 +360,7 @@ impl Game {
         self.square_to_color = [0; 64];
         self.square_to_piece = [0; 64];
         self.square_exists = [false; 64];
-        self.square_moves = [[PieceMove::empty(); 28]; 64];
-        self.square_num_moves = [0; 64];
+        self.square_moves = [ArrayVec::new(); 64];
         self.castle_available = [false; 4];
         self.move_gen = MoveGen::new();
     }
