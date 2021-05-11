@@ -1,0 +1,4 @@
+ignore = [
+    "src/magics.rs",
+    "src/pstables.rs"
+]

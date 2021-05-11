@@ -1,5 +1,8 @@
 use crate::game::Game;
 use crate::piecemove::PieceMove;
+use num_cpus;
+use std::sync::mpsc;
+use std::thread;
 use std::time::Instant;
 
 pub mod game;
@@ -28,6 +31,7 @@ pub fn best_move(
             f64::INFINITY
         },
     );
+    let mut moves = Vec::new();
     for square in 0..64 {
         if !game.square_exists[square] || game.square_to_color[square] != color {
             continue;
@@ -41,30 +45,72 @@ pub fn best_move(
             if !moveutil::legal_move(game, color, piece, &piece_move) {
                 continue;
             }
-            let prev_game_state = game.make_move(color, piece, &piece_move);
-            let new_time = search_time - start_time.elapsed().as_millis() as i128 as i128;
-            let score = {
-                if color == 0 {
-                    min(game, best_move.1, f64::INFINITY, depth - 1, new_time)
-                } else {
-                    max(game, f64::NEG_INFINITY, best_move.1, depth - 1, new_time)
-                }
-            };
-            game.unmake_move(color, piece, &piece_move, &prev_game_state);
-            match score {
-                Some(score) => {
+            moves.push(piece_move);
+        }
+    }
+    let cores = num_cpus::get();
+    let mut grouped_moves = vec![Vec::new(); cores];
+    for (i, piece_move) in moves.into_iter().enumerate() {
+        let group = i % cores;
+        grouped_moves[group].push(piece_move);
+    }
+    let (tx, rx) = mpsc::channel();
+    for move_group in grouped_moves {
+        let mut game = game.clone();
+        let tx = tx.clone();
+        thread::spawn(move || {
+            for piece_move in move_group {
+                let piece = game.square_to_piece[piece_move.start as usize];
+                let prev_game_state = game.make_move(color, piece, &piece_move);
+                let new_time = search_time - start_time.elapsed().as_millis() as i128 as i128;
+                let score = {
                     if color == 0 {
-                        if score > best_move.1 {
-                            best_move = (piece_move, score);
-                        }
+                        min(&mut game, best_move.1, f64::INFINITY, depth - 1, new_time)
                     } else {
-                        if score < best_move.1 {
-                            best_move = (piece_move, score);
+                        max(
+                            &mut game,
+                            f64::NEG_INFINITY,
+                            best_move.1,
+                            depth - 1,
+                            new_time,
+                        )
+                    }
+                };
+                game.unmake_move(color, piece, &piece_move, &prev_game_state);
+                match score {
+                    Some(score) => {
+                        if color == 0 {
+                            if score > best_move.1 {
+                                best_move = (piece_move, score);
+                            }
+                        } else {
+                            if score < best_move.1 {
+                                best_move = (piece_move, score);
+                            }
                         }
                     }
+                    None => tx.send(None).expect("Failed to send result of search"),
                 }
-                None => return None,
             }
+            tx.send(Some(best_move))
+                .expect("Failed to send result of search");
+        });
+    }
+    for _ in 0..cores {
+        let potential_best_move = rx.recv().expect("Failed to read from thread receiver.");
+        match potential_best_move {
+            Some(potential_best_move) => {
+                if color == 0 {
+                    if potential_best_move.1 > best_move.1 {
+                        best_move = potential_best_move;
+                    }
+                } else {
+                    if potential_best_move.1 < best_move.1 {
+                        best_move = potential_best_move;
+                    }
+                }
+            }
+            None => return None,
         }
     }
     Some(best_move)
