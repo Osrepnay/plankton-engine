@@ -1,6 +1,5 @@
 use crate::game::Game;
 use crate::piecemove::PieceMove;
-use num_cpus;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
@@ -110,7 +109,7 @@ pub fn best_move(
                     }
                 }
             }
-            None => return None,
+            None => continue,
         }
     }
     Some(best_move)
